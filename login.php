@@ -1,39 +1,43 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-</head>
-<body>
-    <form method="POST">
-        <label>E-mail:</label>
-        <input type="email" name="email">
-        <label>Contraseña:</label>
-        <input type="password" name="contra">
-        <input type="submit" value="Entrar">
-    </form>
-    <?php
-    session_start();    
-        require 'usuario.php';
-        $conec=new mysqli("127.0.0.1","root","","proyecto1eval");
-        if($conec->connect_errno==0 && $_POST){
-            $sql="select * from usuario where correo_usuario='".$_POST['email']."'";
-            $sentencia=$conec->prepare($sql);
-            $sentencia->execute();
-            $resultado=$sentencia->get_result();
-            if($dato=$resultado->fetch_assoc()){
-                if(password_verify($_POST['contra'],$dato['contrasenya_usuario'])){
-                    $_SESSION['usuario']=$dato['nombre_usuario'];
-                    header('Location: listado.php');
-                }else{
-                    echo "<br>Contraseña incorrecta";
-                }
-            }else{
-                echo "Usuario no encontrado";
-            } 
+<?php
+require_once __DIR__ . '/db.php';
+if (!empty($_SESSION['user_id'])) { header('Location: listado.php'); exit; }
+$error = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrf();
+    $email = trim((string)($_POST['email'] ?? ''));
+    $password = (string)($_POST['contra'] ?? '');
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error = 'Introduce un correo válido.';
+    } else {
+        try {
+            $stmt = db()->prepare('SELECT id_usuario, nombre_usuario, contrasenya_usuario FROM usuario WHERE correo_usuario = ? LIMIT 1');
+            $stmt->execute([$email]);
+            $user = $stmt->fetch();
+            if ($user && password_verify($password, $user['contrasenya_usuario'])) {
+                session_regenerate_id(true);
+                $_SESSION['user_id'] = (int)$user['id_usuario'];
+                $_SESSION['usuario'] = $user['nombre_usuario'];
+                header('Location: listado.php');
+                exit;
+            }
+            $error = 'Correo o contraseña incorrectos.';
+        } catch (PDOException $e) {
+            $error = 'No se pudo conectar a la base de datos.';
         }
-    ?>
-</body>
-</html>
+    }
+}
+?>
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Acceso</title></head>
+<body>
+<h1>Acceso</h1>
+<?php if ($error): ?><p><?= escapeHtml($error) ?></p><?php endif; ?>
+<form method="post">
+<input type="hidden" name="csrf" value="<?= csrfToken() ?>">
+<label>Correo <input type="email" name="email" required></label>
+<label>Contraseña <input type="password" name="contra" required></label>
+<button type="submit">Entrar</button>
+</form>
+<p><a href="registrarse.php">Crear cuenta</a></p>
+</body></html>
